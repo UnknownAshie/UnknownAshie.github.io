@@ -1,1 +1,1 @@
-# Cafe-POS-inventory-website
+# Cozea Cafe (POS)
