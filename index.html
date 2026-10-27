@@ -439,7 +439,7 @@
         .row-action.delete {
             color: #c6604c
         }
-
+        
         .order-status {
             display: inline-block;
             padding: 4px 9px;
@@ -450,17 +450,17 @@
             font-weight: 800;
             text-transform: capitalize;
         }
-
+        
         .order-status.done {
             background: #e2f1e7;
             color: #297251;
         }
-
+        
         .order-status.cancelled {
             background: #f0ece8;
             color: #756a62;
         }
-
+        
         .order-action {
             border: 0;
             background: none;
@@ -471,7 +471,7 @@
             margin-right: 10px;
             padding: 4px 0;
         }
-
+        
         .order-action.cancel {
             color: #c6604c;
         }
@@ -1868,10 +1868,14 @@
             }
 
             function broadcastOrderEvent(event) {
-                localStorage.setItem(incomingOrderStorageKey, JSON.stringify({
-                    ...event,
-                    timestamp: Date.now()
-                }));
+                try {
+                    localStorage.setItem(incomingOrderStorageKey, JSON.stringify({
+                        ...event,
+                        timestamp: Date.now()
+                    }));
+                } catch (error) {
+                    console.error('Unable to broadcast a café order notification to other tabs.', error);
+                }
                 window.dispatchEvent(new CustomEvent('cozea-order-event', {
                     detail: event
                 }));
@@ -1950,8 +1954,7 @@
                         category: category.trim(),
                         price,
                         updatedAt: typeof item.updatedAt === 'string' && item.updatedAt ?
-                            item.updatedAt :
-                            new Date().toISOString()
+                            item.updatedAt : new Date().toISOString()
                     };
                 });
             }
@@ -2072,6 +2075,26 @@
             function itemPrice(item) {
                 const price = Number(item.price);
                 return Number.isFinite(price) && price >= 0 ? price : 0;
+            }
+
+            function createId() {
+                if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                    return crypto.randomUUID();
+                }
+
+                if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+                    const bytes = new Uint8Array(16);
+                    crypto.getRandomValues(bytes);
+                    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+                    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+                    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+                    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+                }
+
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+                    const random = Math.floor(Math.random() * 16);
+                    return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16);
+                });
             }
 
             function escapeHtml(value) {
@@ -2419,53 +2442,79 @@
                 const checkoutButton = $('#checkout-button');
                 isSubmittingCartOrder = true;
                 checkoutButton.disabled = true;
-                const orderId = crypto.randomUUID();
-                const purchasedAt = new Date().toISOString();
-                const completedItems = cart.map((entry) => {
-                    const item = inventory.find((menuItem) => menuItem.id === entry.id);
-                    return {
-                        id: crypto.randomUUID(),
-                        orderId,
-                        name: item.name,
-                        category: item.category,
-                        unitPrice: itemPrice(item),
-                        total: itemPrice(item) * entry.quantity,
-                        quantity: entry.quantity,
-                        purchasedAt
-                    };
-                });
-                const total = completedItems.reduce((sum, item) => sum + item.total, 0);
-                incomingOrders.unshift({
-                    id: orderId,
-                    purchasedAt,
-                    items: completedItems,
-                    total,
-                    status: 'pending'
-                });
-                saveIncomingOrders();
-                broadcastOrderEvent({
-                    type: 'incoming-order',
-                    order: {
+                const originalCart = cart;
+                let orderSaved = false;
+                let createdOrderId = null;
+                try {
+                    const orderId = createId();
+                    createdOrderId = orderId;
+                    const purchasedAt = new Date().toISOString();
+                    const completedItems = cart.map((entry) => {
+                        const item = inventory.find((menuItem) => menuItem.id === entry.id);
+                        return {
+                            id: createId(),
+                            orderId,
+                            name: item.name,
+                            category: item.category,
+                            unitPrice: itemPrice(item),
+                            total: itemPrice(item) * entry.quantity,
+                            quantity: entry.quantity,
+                            purchasedAt
+                        };
+                    });
+                    const total = completedItems.reduce((sum, item) => sum + item.total, 0);
+                    incomingOrders.unshift({
                         id: orderId,
                         purchasedAt,
-                        items: completedItems.map((item) => ({
-                            name: item.name,
-                            quantity: item.quantity
-                        })),
-                        total
+                        items: completedItems,
+                        total,
+                        status: 'pending'
+                    });
+                    saveIncomingOrders();
+                    orderSaved = true;
+                    cart = [];
+                    saveCart();
+                    broadcastOrderEvent({
+                        type: 'incoming-order',
+                        order: {
+                            id: orderId,
+                            purchasedAt,
+                            items: completedItems.map((item) => ({
+                                name: item.name,
+                                quantity: item.quantity
+                            })),
+                            total
+                        }
+                    });
+                    $('#cart-status').textContent = 'Order recorded successfully.';
+                } catch (error) {
+                    console.error('Unable to complete the café order.', error);
+                    if (orderSaved) {
+                        cart = [];
+                    } else {
+                        if (createdOrderId) incomingOrders = incomingOrders.filter((order) => order.id !== createdOrderId);
+                        cart = originalCart;
+                        try {
+                            sessionStorage.setItem(cartStorageKey, JSON.stringify(cart));
+                        } catch (storageError) {
+                            console.error('Unable to preserve the cart after checkout failed.', storageError);
+                        }
                     }
-                });
-                cart = [];
-                saveCart();
-                isSubmittingCartOrder = false;
-                $('#cart-status').textContent = 'Order recorded successfully.';
+                    $('#cart-status').textContent = orderSaved ?
+                        'Order was saved, but the cart could not be cleared. Refresh before trying again.' :
+                        'Could not save your order. Please try again.';
+                    renderCart();
+                } finally {
+                    isSubmittingCartOrder = false;
+                    if (cart.length) checkoutButton.disabled = false;
+                }
             }
 
             function completeCounterSale(item, quantity) {
                 const purchasedAt = new Date().toISOString();
-                const orderId = crypto.randomUUID();
+                const orderId = createId();
                 const purchase = {
-                    id: crypto.randomUUID(),
+                    id: createId(),
                     orderId,
                     name: item.name,
                     category: item.category,
@@ -2566,7 +2615,7 @@
                 event.preventDefault();
                 const id = $('#item-id').value;
                 const record = {
-                    id: id || crypto.randomUUID(),
+                    id: id || createId(),
                     name: $('#item-name').value.trim(),
                     category: $('#item-category').value.trim(),
                     price: Number($('#item-price').value),
@@ -2648,7 +2697,9 @@
                 if (!window.confirm('Clear all order history? This cannot be undone.')) return;
                 purchases = [];
                 savePurchases();
-                broadcastOrderEvent({ type: 'orders-cleared' });
+                broadcastOrderEvent({
+                    type: 'orders-cleared'
+                });
                 $('#order-history-message').textContent = 'Order history cleared.';
             });
             if ($('#today')) $('#today').textContent = new Intl.DateTimeFormat('en', {
