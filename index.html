@@ -439,6 +439,42 @@
         .row-action.delete {
             color: #c6604c
         }
+
+        .order-status {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #fff0e9;
+            color: #a64e35;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+
+        .order-status.done {
+            background: #e2f1e7;
+            color: #297251;
+        }
+
+        .order-status.cancelled {
+            background: #f0ece8;
+            color: #756a62;
+        }
+
+        .order-action {
+            border: 0;
+            background: none;
+            color: var(--teal-dark);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 800;
+            margin-right: 10px;
+            padding: 4px 0;
+        }
+
+        .order-action.cancel {
+            color: #c6604c;
+        }
         
         .empty-state {
             text-align: center;
@@ -1107,6 +1143,37 @@
             background: rgba(255, 255, 255, .18);
         }
         
+        .incoming-order-notification {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 30;
+            display: grid;
+            gap: 4px;
+            width: min(360px, calc(100vw - 32px));
+            padding: 18px 20px;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--coral);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            box-shadow: var(--shadow);
+            text-align: left;
+        }
+        
+        .incoming-order-notification[hidden] {
+            display: none;
+        }
+        
+        .incoming-order-notification strong {
+            font-size: 15px;
+        }
+        
+        .incoming-order-notification span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        
         .admin-modal {
             position: fixed;
             inset: 0;
@@ -1169,7 +1236,7 @@
             gap: 8px;
             margin-top: 14px;
         }
-
+        
         .menu-backup-actions {
             padding: 0 27px 20px;
         }
@@ -1268,7 +1335,6 @@
                 padding-left: 18px;
                 padding-right: 18px;
             }
-
             .menu-backup-actions {
                 padding-left: 18px;
                 padding-right: 18px;
@@ -1315,11 +1381,11 @@
             <div class="header-note"><span class="status-dot"></span> Vigan City · Local workspace</div>
             <button class="admin-toggle" id="admin-toggle" type="button" aria-haspopup="dialog">Admin login</button>
         </div>
-        <nav class="navbar" aria-label="Main navigation"><button class="nav-button is-active" type="button" data-tab="home" aria-current="page">Dashboard <span>Today at a glance</span></button><button class="nav-button" type="button" data-tab="menu">Take an order <span>Drinks &amp; bites</span></button>
+        <nav class="navbar" aria-label="Main navigation"><button class="nav-button" type="button" data-tab="home" data-admin-only hidden>Dashboard <span>Today at a glance</span></button><button class="nav-button is-active" type="button" data-tab="menu" aria-current="page">Take an order <span>Drinks &amp; bites</span></button>
             <button class="nav-button" type="button" data-tab="purchases" data-admin-only hidden>Orders &amp; sales</button><button class="nav-button" type="button" data-tab="manage" data-admin-only hidden>Menu management</button></nav>
     </header>
     <main class="page-shell">
-        <section class="tab-panel is-active" data-panel="home">
+        <section class="tab-panel" data-panel="home" hidden>
             <div class="page-heading">
                 <div>
                     <p class="eyebrow">COZÉA CAFÉ / <span id="today"></span></p>
@@ -1396,7 +1462,7 @@
                 <p class="dashboard-empty" id="dashboard-orders-empty" hidden>No orders have been recorded yet. Start by taking an order from the menu.</p>
             </div>
         </section>
-        <section class="tab-panel" data-panel="menu" hidden>
+        <section class="tab-panel is-active" data-panel="menu">
             <div class="page-heading">
                 <div>
                     <p class="eyebrow">COZÉA CAFÉ / <span>Made with care</span></p>
@@ -1445,6 +1511,36 @@
                 <article class="metric"><span>Orders completed</span><strong id="purchase-count">0</strong></article>
                 <article class="metric metric-accent"><span>Items sold</span><strong id="purchased-unit-count">0</strong></article>
                 <article class="metric"><span>Sales recorded</span><strong id="sales-revenue">₱0.00</strong></article>
+            </div>
+            <div class="table-card incoming-orders-card">
+                <div class="card-heading">
+                    <div>
+                        <h2>Incoming orders</h2>
+                        <p>Review new customer orders and mark each as done or cancelled.</p>
+                    </div>
+                    <span class="record-count" id="incoming-order-count">0 pending</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Received</th>
+                                <th>Order</th>
+                                <th>Items</th>
+                                <th>Qty</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incoming-orders-table"></tbody>
+                    </table>
+                </div>
+                <div class="empty-state" id="incoming-orders-empty">
+                    <div class="empty-icon">-</div>
+                    <h3>No incoming orders</h3>
+                    <p>New customer orders will appear here.</p>
+                </div>
             </div>
             <div class="table-card">
                 <div class="card-heading">
@@ -1553,20 +1649,31 @@
             </div>
         </form>
     </div>
+    <button class="incoming-order-notification" id="incoming-order-notification" type="button" aria-live="assertive" hidden>
+        <strong>New order received</strong>
+        <span id="incoming-order-summary"></span>
+    </button>
     <footer><span>Cozea Cafe · Cafe operations</span><span>Data saved in this browser</span></footer>
     <script>
         (() => {
             const menuStorageKey = 'admin';
             const purchaseStorageKey = 'steel-asia-purchases';
+            const ordersStorageKey = 'cozea-incoming-orders';
             const cartStorageKey = 'cafe-cart';
-            const adminPassword = 'admin123';
+            const incomingOrderStorageKey = 'cozea-incoming-order';
             const adminSessionKey = 'steel-asia-admin';
             const menuBackupFormat = 'cozea-menu';
+            const adminPassword = 'admin123';
             let inventory = readInventory();
             let purchases = readPurchases();
+            let incomingOrders = readIncomingOrders();
             let cart = readCart();
             let isAdminLoggedIn = sessionStorage.getItem(adminSessionKey) === 'unlocked';
             let pendingAdminAction = null;
+            let notificationAudioContext = null;
+            let incomingOrderToastTimeout = null;
+            let isSubmittingCartOrder = false;
+            const notifiedIncomingOrderIds = new Set();
             const $ = (selector) => document.querySelector(selector);
             const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -1639,6 +1746,16 @@
                 }
             }
 
+            function readIncomingOrders() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(ordersStorageKey));
+                    return Array.isArray(saved) ? saved : [];
+                } catch (error) {
+                    console.error('Unable to read incoming orders.', error);
+                    return [];
+                }
+            }
+
             function readCart() {
                 try {
                     const saved = sessionStorage.getItem(cartStorageKey);
@@ -1658,6 +1775,148 @@
                 localStorage.setItem(purchaseStorageKey, JSON.stringify(purchases));
                 render();
             }
+
+            function saveIncomingOrders() {
+                localStorage.setItem(ordersStorageKey, JSON.stringify(incomingOrders));
+                render();
+            }
+
+            function enableAdminNotifications() {
+                if (!notificationAudioContext && typeof window.AudioContext === 'function') {
+                    notificationAudioContext = new window.AudioContext();
+                    notificationAudioContext.resume().catch((error) => {
+                        console.error('Unable to enable the incoming-order sound.', error);
+                    });
+                }
+
+                if (typeof window.Notification === 'function' && window.Notification.permission === 'default') {
+                    window.Notification.requestPermission().catch((error) => {
+                        console.error('Unable to request desktop notification permission.', error);
+                    });
+                }
+            }
+
+            function activateAdminNotifications() {
+                if (!isAdminLoggedIn) return;
+                document.removeEventListener('pointerdown', activateAdminNotifications);
+                document.removeEventListener('keydown', activateAdminNotifications);
+                enableAdminNotifications();
+            }
+
+            document.addEventListener('pointerdown', activateAdminNotifications);
+            document.addEventListener('keydown', activateAdminNotifications);
+
+            function playIncomingOrderSound() {
+                const context = notificationAudioContext;
+                if (!context || context.state === 'closed') return;
+
+                const playTone = () => {
+                    const oscillator = context.createOscillator();
+                    const gain = context.createGain();
+                    const now = context.currentTime;
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(880, now);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+                    oscillator.connect(gain);
+                    gain.connect(context.destination);
+                    oscillator.start(now);
+                    oscillator.stop(now + 0.23);
+                };
+
+                if (context.state === 'running') {
+                    playTone();
+                } else {
+                    context.resume().then(playTone).catch((error) => {
+                        console.error('Unable to play the incoming-order sound.', error);
+                    });
+                }
+            }
+
+            function showIncomingOrderNotification(order) {
+                if (!isAdminLoggedIn || !order || typeof order.id !== 'string' || notifiedIncomingOrderIds.has(order.id)) return;
+                notifiedIncomingOrderIds.add(order.id);
+
+                const items = Array.isArray(order.items) ? order.items : [];
+                const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+                const total = Number(order.total) || 0;
+                $('#incoming-order-summary').textContent = `${itemCount} item${itemCount === 1 ? '' : 's'} · ${formatCurrency(total)} · View orders`;
+                const toast = $('#incoming-order-notification');
+                toast.hidden = false;
+                window.clearTimeout(incomingOrderToastTimeout);
+                incomingOrderToastTimeout = window.setTimeout(() => {
+                    toast.hidden = true;
+                }, 8000);
+                playIncomingOrderSound();
+
+                if (document.hidden && typeof window.Notification === 'function' && window.Notification.permission === 'granted') {
+                    try {
+                        const desktopNotification = new window.Notification('New cafe order', {
+                            body: `${itemCount} item${itemCount === 1 ? '' : 's'} · ${formatCurrency(total)}`,
+                            tag: order.id
+                        });
+                        desktopNotification.onclick = () => {
+                            window.focus();
+                            showTab('purchases');
+                            desktopNotification.close();
+                        };
+                    } catch (error) {
+                        console.error('Unable to display a desktop order notification.', error);
+                    }
+                }
+            }
+
+            function broadcastOrderEvent(event) {
+                localStorage.setItem(incomingOrderStorageKey, JSON.stringify({
+                    ...event,
+                    timestamp: Date.now()
+                }));
+                window.dispatchEvent(new CustomEvent('cozea-order-event', {
+                    detail: event
+                }));
+            }
+
+            function handleOrderEvent(event) {
+                if (event.type === 'incoming-order') {
+                    showIncomingOrderNotification(event.order);
+                } else if (event.type === 'orders-cleared') {
+                    purchases = [];
+                    savePurchases();
+                }
+            }
+
+            window.addEventListener('cozea-order-event', (event) => {
+                handleOrderEvent(event.detail);
+            });
+            window.addEventListener('storage', (event) => {
+                if (event.key === ordersStorageKey) {
+                    try {
+                        const updatedOrders = JSON.parse(event.newValue || '[]');
+                        incomingOrders = Array.isArray(updatedOrders) ? updatedOrders : [];
+                        render();
+                    } catch (error) {
+                        console.error('Unable to synchronize incoming café orders between tabs.', error);
+                    }
+                    return;
+                }
+                if (event.key === purchaseStorageKey) {
+                    try {
+                        const updatedPurchases = JSON.parse(event.newValue || '[]');
+                        purchases = Array.isArray(updatedPurchases) ? updatedPurchases : [];
+                        render();
+                    } catch (error) {
+                        console.error('Unable to synchronize café orders between tabs.', error);
+                    }
+                    return;
+                }
+                if (event.key !== incomingOrderStorageKey || !event.newValue) return;
+                try {
+                    handleOrderEvent(JSON.parse(event.newValue));
+                } catch (error) {
+                    console.error('Unable to read a café order notification.', error);
+                }
+            });
 
             function saveCart() {
                 sessionStorage.setItem(cartStorageKey, JSON.stringify(cart));
@@ -1690,9 +1949,9 @@
                         name,
                         category: category.trim(),
                         price,
-                        updatedAt: typeof item.updatedAt === 'string' && item.updatedAt
-                            ? item.updatedAt
-                            : new Date().toISOString()
+                        updatedAt: typeof item.updatedAt === 'string' && item.updatedAt ?
+                            item.updatedAt :
+                            new Date().toISOString()
                     };
                 });
             }
@@ -1704,15 +1963,25 @@
                         format: menuBackupFormat,
                         version: 1,
                         exportedAt: new Date().toISOString(),
-                        items: inventory.map(({ id, name, category, price, updatedAt }) => ({
+                        items: inventory.map(({
+                            id,
+                            name,
+                            category,
+                            price,
+                            updatedAt
+                        }) => ({
                             id,
                             name,
                             category: category || '',
-                            price: itemPrice({ price }),
+                            price: itemPrice({
+                                price
+                            }),
                             updatedAt: updatedAt || ''
                         }))
                     };
-                    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'text/plain;charset=utf-8' });
+                    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+                        type: 'text/plain;charset=utf-8'
+                    });
                     const downloadUrl = URL.createObjectURL(blob);
                     const link = document.createElement('a');
                     link.href = downloadUrl;
@@ -1742,9 +2011,9 @@
                     message.textContent = `Menu restored with ${imported.length} item${imported.length === 1 ? '' : 's'}.`;
                 } catch (error) {
                     console.error('Unable to import the cafe menu backup.', error);
-                    message.textContent = error instanceof SyntaxError
-                        ? 'Could not read this file. Choose a valid Cozéa menu .txt backup.'
-                        : error.message || 'Could not import the menu backup. Please try again.';
+                    message.textContent = error instanceof SyntaxError ?
+                        'Could not read this file. Choose a valid Cozéa menu .txt backup.' :
+                        error.message || 'Could not import the menu backup. Please try again.';
                 }
             }
 
@@ -1850,7 +2119,7 @@
 
                 subtotalEl.textContent = formatCurrency(subtotal);
                 totalEl.textContent = formatCurrency(subtotal);
-                checkoutButton.disabled = false;
+                checkoutButton.disabled = isSubmittingCartOrder;
                 statusEl.textContent = `${cart.length} item(s) ready for checkout.`;
             }
 
@@ -1960,6 +2229,26 @@
                     $('#sales-revenue').textContent = formatCurrency(totalSales);
                 }
 
+                if ($('#incoming-orders-table')) {
+                    const sortedIncomingOrders = [...incomingOrders].sort((a, b) =>
+                        new Date(b.purchasedAt) - new Date(a.purchasedAt));
+                    const pendingCount = incomingOrders.filter((order) => order.status === 'pending').length;
+                    $('#incoming-order-count').textContent = `${pendingCount} pending`;
+                    $('#incoming-orders-table').innerHTML = sortedIncomingOrders.map((order) => {
+                        const items = Array.isArray(order.items) ? order.items : [];
+                        const itemNames = items.map((item) =>
+                            `${escapeHtml(item.name)} × ${Number(item.quantity) || 0}`).join(', ');
+                        const quantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+                        const total = Number(order.total) || items.reduce((sum, item) => sum + purchaseTotal(item), 0);
+                        const status = ['pending', 'done', 'cancelled'].includes(order.status) ? order.status : 'pending';
+                        const actions = status === 'pending' ?
+                            `<button class="order-action" data-order-done="${escapeHtml(order.id)}" type="button">Done</button><button class="order-action cancel" data-order-cancel="${escapeHtml(order.id)}" type="button">Cancel</button>` :
+                            '—';
+                        return `<tr><td>${new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(order.purchasedAt))}</td><td class="item-name">${escapeHtml(String(order.id).slice(0, 8).toUpperCase())}</td><td>${itemNames}</td><td>${quantity}</td><td>${formatCurrency(total)}</td><td><span class="order-status ${status}">${status}</span></td><td>${actions}</td></tr>`;
+                    }).join('');
+                    $('#incoming-orders-empty').hidden = incomingOrders.length > 0;
+                }
+
                 if ($('#purchase-table')) {
                     $('#purchase-table').innerHTML = purchases.map((purchase) => {
                         const unitPrice = Number(purchase.unitPrice !== undefined ? purchase.unitPrice : purchase.price) || 0;
@@ -1992,6 +2281,7 @@
             }
 
             function showTab(name) {
+                if (name === 'home' && !isAdminLoggedIn) name = 'menu';
                 $$('.nav-button').forEach((button) => {
                     const isActive = button.dataset.tab === name;
                     button.classList.toggle('is-active', isActive);
@@ -2029,7 +2319,7 @@
             }
 
             function requestTab(name) {
-                if ((name === 'manage' || name === 'purchases') && !isAdminLoggedIn) {
+                if ((name === 'home' || name === 'manage' || name === 'purchases') && !isAdminLoggedIn) {
                     pendingAdminAction = () => showTab(name);
                     openAdminLogin();
                     return;
@@ -2102,6 +2392,20 @@
                 saveCart();
             }
 
+            function updateIncomingOrderStatus(id, status) {
+                if (!['done', 'cancelled'].includes(status)) return;
+                const order = incomingOrders.find((entry) => entry.id === id);
+                if (!order || order.status !== 'pending') return;
+
+                order.status = status;
+                order.resolvedAt = new Date().toISOString();
+                if (status === 'done' && !purchases.some((purchase) => purchase.orderId === order.id)) {
+                    purchases.unshift(...order.items);
+                    savePurchases();
+                }
+                saveIncomingOrders();
+            }
+
             function completeOrder() {
                 if (!cart.length) {
                     return;
@@ -2112,11 +2416,14 @@
                     return;
                 }
 
+                const checkoutButton = $('#checkout-button');
+                isSubmittingCartOrder = true;
+                checkoutButton.disabled = true;
                 const orderId = crypto.randomUUID();
                 const purchasedAt = new Date().toISOString();
-                cart.forEach((entry) => {
+                const completedItems = cart.map((entry) => {
                     const item = inventory.find((menuItem) => menuItem.id === entry.id);
-                    purchases.unshift({
+                    return {
                         id: crypto.randomUUID(),
                         orderId,
                         name: item.name,
@@ -2125,23 +2432,65 @@
                         total: itemPrice(item) * entry.quantity,
                         quantity: entry.quantity,
                         purchasedAt
-                    });
+                    };
                 });
-
-                savePurchases();
+                const total = completedItems.reduce((sum, item) => sum + item.total, 0);
+                incomingOrders.unshift({
+                    id: orderId,
+                    purchasedAt,
+                    items: completedItems,
+                    total,
+                    status: 'pending'
+                });
+                saveIncomingOrders();
+                broadcastOrderEvent({
+                    type: 'incoming-order',
+                    order: {
+                        id: orderId,
+                        purchasedAt,
+                        items: completedItems.map((item) => ({
+                            name: item.name,
+                            quantity: item.quantity
+                        })),
+                        total
+                    }
+                });
                 cart = [];
                 saveCart();
+                isSubmittingCartOrder = false;
                 $('#cart-status').textContent = 'Order recorded successfully.';
+            }
+
+            function completeCounterSale(item, quantity) {
+                const purchasedAt = new Date().toISOString();
+                const orderId = crypto.randomUUID();
+                const purchase = {
+                    id: crypto.randomUUID(),
+                    orderId,
+                    name: item.name,
+                    category: item.category,
+                    unitPrice: itemPrice(item),
+                    total: itemPrice(item) * quantity,
+                    quantity,
+                    purchasedAt
+                };
+                purchases.unshift(purchase);
+                savePurchases();
+                return purchase;
+            }
+
+            function logoutAdmin() {
+                sessionStorage.removeItem(adminSessionKey);
+                isAdminLoggedIn = false;
+                closeAdminLogin();
+                syncAdminNavigation();
+                showTab('menu');
             }
 
             $$('[data-tab]').forEach((button) => button.addEventListener('click', () => requestTab(button.dataset.tab)));
             $('#admin-toggle').addEventListener('click', () => {
                 if (isAdminLoggedIn) {
-                    sessionStorage.removeItem(adminSessionKey);
-                    isAdminLoggedIn = false;
-                    closeAdminLogin();
-                    syncAdminNavigation();
-                    showTab('home');
+                    logoutAdmin();
                     return;
                 }
                 pendingAdminAction = null;
@@ -2156,6 +2505,7 @@
                 }
                 sessionStorage.setItem(adminSessionKey, 'unlocked');
                 isAdminLoggedIn = true;
+                enableAdminNotifications();
                 syncAdminNavigation();
                 $('#admin-modal').hidden = true;
                 const action = pendingAdminAction;
@@ -2164,6 +2514,11 @@
             });
             $('#admin-close').addEventListener('click', closeAdminLogin);
             $('#admin-cancel').addEventListener('click', closeAdminLogin);
+            $('#incoming-order-notification').addEventListener('click', () => {
+                $('#incoming-order-notification').hidden = true;
+                window.clearTimeout(incomingOrderToastTimeout);
+                showTab('purchases');
+            });
             $('#admin-modal').addEventListener('click', (event) => {
                 if (event.target === $('#admin-modal')) closeAdminLogin();
             });
@@ -2200,19 +2555,8 @@
                     message.textContent = 'Enter a whole quantity of at least 1.';
                     return;
                 }
-                const orderId = crypto.randomUUID();
-                purchases.unshift({
-                    id: crypto.randomUUID(),
-                    orderId,
-                    name: item.name,
-                    category: item.category,
-                    unitPrice: itemPrice(item),
-                    total: itemPrice(item) * quantity,
-                    quantity,
-                    purchasedAt: new Date().toISOString()
-                });
-                savePurchases();
-                message.textContent = `Order complete: ${quantity} × ${item.name} · ${formatCurrency(itemPrice(item) * quantity)}.`;
+                const purchase = completeCounterSale(item, quantity);
+                message.textContent = `Order complete: ${quantity} × ${item.name} · ${formatCurrency(purchase.total)}.`;
                 $('#pos-quantity').value = 1;
                 updatePosSummary();
             });
@@ -2244,6 +2588,8 @@
                 const add = event.target.closest('[data-cart-add]');
                 const sub = event.target.closest('[data-cart-sub]');
                 const removeCart = event.target.closest('[data-cart-remove]');
+                const markOrderDone = event.target.closest('[data-order-done]');
+                const markOrderCancelled = event.target.closest('[data-order-cancel]');
 
                 if (edit) editItem(edit.dataset.edit);
                 if (remove) deleteItem(remove.dataset.delete);
@@ -2251,6 +2597,8 @@
                 if (add) updateCartQuantity(add.dataset.cartAdd, 1);
                 if (sub) updateCartQuantity(sub.dataset.cartSub, -1);
                 if (removeCart) removeCartItem(removeCart.dataset.cartRemove);
+                if (markOrderDone) updateIncomingOrderStatus(markOrderDone.dataset.orderDone, 'done');
+                if (markOrderCancelled) updateIncomingOrderStatus(markOrderCancelled.dataset.orderCancel, 'cancelled');
             });
 
             const exportOrderHistoryButton = $('#export-order-history-button');
@@ -2300,6 +2648,7 @@
                 if (!window.confirm('Clear all order history? This cannot be undone.')) return;
                 purchases = [];
                 savePurchases();
+                broadcastOrderEvent({ type: 'orders-cleared' });
                 $('#order-history-message').textContent = 'Order history cleared.';
             });
             if ($('#today')) $('#today').textContent = new Intl.DateTimeFormat('en', {
@@ -2309,7 +2658,7 @@
             }).format(new Date());
 
             syncAdminNavigation();
-            showTab('home');
+            showTab('menu');
             render();
         })();
     </script>
